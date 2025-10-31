@@ -7,15 +7,22 @@ config();
 const bot = new Telegraf(process.env.token || "");
 bot.use(session());
 
+bot.start((ctx) => {
+    ctx.reply(
+        "Бот позволяет искать и скачивать треки с SoundCloud.\n" +
+        "Просто отправьте название песни, выберите вариант из списка, и получите трек в формате MP3."
+    );
+});
+
 bot.on("text", async (ctx) => {
     const query = ctx.message?.text?.trim();
     if (!query || query.length < 2 || ctx.message.text.startsWith("/")) return;
 
     try {
-        let results: Track[] = await searchTrack(query);
+        const results: Track[] = await searchTrack(query);
         if (!results.length) return ctx.reply("Ничего не найдено.");
 
-        const searchmsg = await ctx.reply("🔎Поиск");
+        const searchmsg = await ctx.reply("🔎 Поиск...");
 
         const filtered: Track[] = [];
         for (const track of results) {
@@ -40,16 +47,17 @@ bot.on("text", async (ctx) => {
             }
             return Markup.button.callback(
                 `${i + 1}. ${t.title} — ${t.author}${duration}`,
-                `track_${i}`
+                `sc_${i}`
             );
         });
 
-        await ctx.deleteMessage(searchmsg.message_id);
-
-        await ctx.reply(
+        const listMsg = await ctx.reply(
             "Выбери трек:",
             Markup.inlineKeyboard(buttons, { columns: 1 })
         );
+        ctx.session.listMessageId = listMsg.message_id;
+
+        await ctx.deleteMessage(searchmsg.message_id);
     } catch (err) {
         console.error(err);
         ctx.reply("Ошибка поиска треков.");
@@ -60,7 +68,7 @@ bot.on("callback_query", async (ctx) => {
     const cb = ctx.update.callback_query;
     if (!("data" in cb)) return ctx.answerCbQuery("Некорректный callback");
 
-    const index = Number(cb.data.replace("track_", ""));
+    const index = Number(cb.data.replace("sc_", ""));
     const track = ctx.session?.scList?.[index];
     if (!track) return ctx.answerCbQuery("Список устарел");
 
@@ -68,14 +76,29 @@ bot.on("callback_query", async (ctx) => {
         parse_mode: "HTML",
     });
 
-    const buffer = await downloadTrackBuffer(track.url);
-    if (!buffer) return ctx.reply("❌ Не удалось скачать трек.");
+    try {
+        const buffer = await downloadTrackBuffer(track.url);
+        if (!buffer) return ctx.reply("❌ Не удалось скачать трек.");
 
-    await ctx.replyWithAudio(
-        { source: buffer },
-        { title: track.title, performer: track.author }
-    );
-    ctx.answerCbQuery();
+        await ctx.replyWithAudio(
+            { source: buffer },
+            { title: track.title, performer: track.author }
+        );
+
+        delete ctx.session.scList;
+
+        if (ctx.session.listMessageId) {
+            try {
+                await ctx.deleteMessage(ctx.session.listMessageId);
+            } catch {}
+            delete ctx.session.listMessageId;
+        }
+
+        ctx.answerCbQuery();
+    } catch (err) {
+        console.error("Ошибка скачивания:", err);
+        ctx.reply("❌ Не удалось скачать трек.");
+    }
 });
 
 bot.launch(() => console.log("Bot started"));
