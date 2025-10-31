@@ -44,6 +44,8 @@ bot.on("text", async (ctx) => {
             );
         });
 
+        await ctx.deleteMessage(searchmsg.message_id);
+
         await ctx.reply(
             "Выбери трек:",
             Markup.inlineKeyboard(buttons, { columns: 1 })
