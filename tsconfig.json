@@ -1,0 +1,14 @@
+{
+    "compilerOptions": {
+        "module": "nodenext",
+        "target": "es2022",
+        "types": [],
+        "sourceMap": true,
+        "strict": true,
+        "skipLibCheck": true,
+        "rootDir": "./src",
+        "outDir": "./dist",
+        "allowImportingTsExtensions": true,
+        "noEmit": true
+    }
+}
