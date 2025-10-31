@@ -9,7 +9,7 @@ bot.use(session());
 
 bot.on("text", async (ctx) => {
     const query = ctx.message?.text?.trim();
-    if (!query || query.length < 2) return;
+    if (!query || query.length < 2 || ctx.message.text.startsWith("/")) return;
 
     try {
         let results: Track[] = await searchTrack(query);
