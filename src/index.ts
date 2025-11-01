@@ -18,6 +18,7 @@ bot.start((ctx) => {
 bot.on("text", async (ctx) => {
     const query = ctx.message?.text?.trim();
 
+    // Проверяем тип чата
     const isPrivate = ctx.chat?.type === "private";
     const isGroup =
         ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
@@ -32,10 +33,10 @@ bot.on("text", async (ctx) => {
 
     try {
         console.log(
-            `[Поиск] | "${searchQuery}" | от ${ctx.message.from.username}`
+            `[Поиск] | "${searchQuery}" | от ${ctx.message.from.}`
         );
         const results: Track[] = await searchTrack(searchQuery);
-        if (!results.length) return ctx.reply("❌ | Ничего не найдено.");
+        if (!results.length) return ctx.reply("Ничего не найдено.");
 
         const searchmsg = await ctx.reply("🔎 | Поиск...");
 
@@ -51,11 +52,7 @@ bot.on("text", async (ctx) => {
             return ctx.reply("❌ | Нет доступных для скачивания треков.");
 
         ctx.session ??= {};
-        ctx.session.scList = filtered.map((t) => ({
-            title: t.title,
-            author: t.author || "Unknown",
-            url: t.url,
-        }));
+        ctx.session.scList = filtered;
 
         const buttons = filtered.map((t, i) => {
             let duration = "";
@@ -85,13 +82,13 @@ bot.on("text", async (ctx) => {
 
 bot.on("callback_query", async (ctx) => {
     const cb = ctx.update.callback_query;
-    if (!("data" in cb)) return ctx.answerCbQuery("❌ | Некорректный callback");
+    if (!("data" in cb)) return ctx.answerCbQuery("Некорректный callback");
 
     const index = Number(cb.data.replace("sc_", ""));
     const track = ctx.session?.scList?.[index];
     if (!track) return ctx.answerCbQuery("❌ | Список устарел");
 
-    await ctx.reply(`🎵 | Загружаю трек: <b>${track.title}</b>`, {
+    await ctx.reply(`🎵 Загружаю трек: <b>${track.title}</b>`, {
         parse_mode: "HTML",
     });
 
@@ -115,9 +112,9 @@ bot.on("callback_query", async (ctx) => {
 
         ctx.answerCbQuery();
     } catch (err) {
-        console.error("❌ | Ошибка скачивания:", err);
+        console.error("Ошибка скачивания:", err);
         ctx.reply("❌ | Не удалось скачать трек.");
     }
 });
 
-bot.launch(() => console.log("✅ - Bot started"));
+bot.launch(() => console.log("Bot started"));
