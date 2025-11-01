@@ -2,10 +2,18 @@ import { Markup, Telegraf, session } from "telegraf";
 import { config } from "dotenv";
 import { downloadTrackBuffer, searchTrack } from "./utils/MusicUtils.ts";
 import type { Track } from "./utils/MusicUtils.ts";
-
 config();
+
 const bot = new Telegraf(process.env.token || "");
 bot.use(session());
+
+bot.start((ctx) => {
+    ctx.reply(
+        "Бот позволяет искать и скачивать треки с SoundCloud.\n" +
+            "Просто отправьте название песни, выберите вариант из списка, и получите трек в формате MP3." +
+            "\n\nРазработчик: @djvlnn"
+    );
+});
 
 bot.on("text", async (ctx) => {
     const query = ctx.message?.text?.trim();
