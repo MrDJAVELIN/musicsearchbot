@@ -7,6 +7,12 @@ config();
 const bot = new Telegraf(process.env.token || "");
 bot.use(session());
 
+const globalLists = new Map<string, Track[]>();
+
+function genListId() {
+    return Math.random().toString(36).slice(2, 10);
+}
+
 bot.start((ctx) => {
     ctx.reply(
         "Бот позволяет искать и скачивать треки с SoundCloud.\n" +
@@ -18,8 +24,6 @@ bot.start((ctx) => {
 bot.on("text", async (ctx) => {
     const query = ctx.message?.text?.trim();
 
-    // Проверяем тип чата
-    const isPrivate = ctx.chat?.type === "private";
     const isGroup =
         ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
 
@@ -28,17 +32,35 @@ bot.on("text", async (ctx) => {
     const searchQuery = isGroup ? query.replace("/msearch", "").trim() : query;
 
     if (!searchQuery) {
-        ctx.reply("⚠️ | Введите название песни");
+        return ctx.reply("⚠️ | Введите название песни");
     }
 
     try {
         console.log(
-            `[Поиск] | "${searchQuery}" | от ${ctx.message.from.}`
+            `[Поиск] | "${searchQuery}" | от ${ctx.message.from.username}`
         );
-        const results: Track[] = await searchTrack(searchQuery);
-        if (!results.length) return ctx.reply("Ничего не найдено.");
 
-        const searchmsg = await ctx.reply("🔎 | Поиск...");
+        let seconds = 0;
+        const searchmsg = await ctx.reply(`🔎 | Поиск... 0 сек`);
+
+        const timer = setInterval(async () => {
+            seconds++;
+            try {
+                await ctx.telegram.editMessageText(
+                    searchmsg.chat.id,
+                    searchmsg.message_id,
+                    undefined,
+                    `🔎 | Поиск... ${seconds} сек`
+                );
+            } catch {}
+        }, 1000);
+
+        const results: Track[] = await searchTrack(searchQuery);
+
+        if (!results.length) {
+            clearInterval(timer);
+            return ctx.reply("❌ | Ничего не найдено.");
+        }
 
         const filtered: Track[] = [];
         for (const track of results) {
@@ -48,32 +70,32 @@ bot.on("text", async (ctx) => {
             } catch {}
         }
 
+        clearInterval(timer);
+        await ctx.deleteMessage(searchmsg.message_id).catch(() => {});
+
         if (!filtered.length)
             return ctx.reply("❌ | Нет доступных для скачивания треков.");
 
-        ctx.session ??= {};
-        ctx.session.scList = filtered;
+        const listId = genListId();
+        globalLists.set(listId, filtered);
 
         const buttons = filtered.map((t, i) => {
             let duration = "";
             if (t.duration) {
-                const minutes = Math.floor(t.duration / 60);
-                const seconds = t.duration % 60;
-                duration = ` | ${minutes}:${seconds}`;
+                duration = ` | ${Math.floor(t.duration / 60)}:${String(
+                    t.duration % 60
+                ).padStart(2, "0")}`;
             }
             return Markup.button.callback(
                 `${i + 1}. ${t.title} — ${t.author}${duration}`,
-                `sc_${i}`
+                `sc_${listId}_${i}`
             );
         });
 
-        const listMsg = await ctx.reply(
-            "Выбери трек:",
+        await ctx.reply(
+            `Выбери трек: (поиск занял ${seconds} сек)`,
             Markup.inlineKeyboard(buttons, { columns: 1 })
         );
-        ctx.session.listMessageId = listMsg.message_id;
-
-        await ctx.deleteMessage(searchmsg.message_id);
     } catch (err) {
         console.error(err);
         ctx.reply("❌ | Ошибка поиска треков.");
@@ -84,9 +106,19 @@ bot.on("callback_query", async (ctx) => {
     const cb = ctx.update.callback_query;
     if (!("data" in cb)) return ctx.answerCbQuery("Некорректный callback");
 
-    const index = Number(cb.data.replace("sc_", ""));
-    const track = ctx.session?.scList?.[index];
-    if (!track) return ctx.answerCbQuery("❌ | Список устарел");
+    const data = cb.data;
+
+    if (!data.startsWith("sc_"))
+        return ctx.answerCbQuery("❌ | Неизвестная команда");
+
+    const [, listId, indexStr] = data.split("_");
+    const index = Number(indexStr);
+
+    const list = globalLists.get(listId);
+    if (!list) return ctx.answerCbQuery("❌ | Список устарел");
+
+    const track = list[index];
+    if (!track) return ctx.answerCbQuery("❌ | Трек не найден");
 
     await ctx.reply(`🎵 Загружаю трек: <b>${track.title}</b>`, {
         parse_mode: "HTML",
@@ -100,15 +132,6 @@ bot.on("callback_query", async (ctx) => {
             { source: buffer },
             { title: track.title, performer: track.author }
         );
-
-        delete ctx.session.scList;
-
-        if (ctx.session.listMessageId) {
-            try {
-                await ctx.deleteMessage(ctx.session.listMessageId);
-            } catch {}
-            delete ctx.session.listMessageId;
-        }
 
         ctx.answerCbQuery();
     } catch (err) {
