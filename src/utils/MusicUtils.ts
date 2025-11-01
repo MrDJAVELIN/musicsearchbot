@@ -51,7 +51,7 @@ export async function searchTrack(query: string): Promise<Track[]> {
             duration: Math.floor(track.duration / 1000),
         })) as Track[];
     } catch (err: any) {
-        console.error("❌ | SoundCloud SEARCH error:", err.message || err);
+        console.error("SoundCloud SEARCH error:", err.message || err);
         return [];
     }
 }
@@ -69,7 +69,7 @@ export async function downloadTrackBuffer(url: string): Promise<Buffer | null> {
             });
             stream.on("end", () => resolve(Buffer.concat(chunks)));
             stream.on("error", (err) => {
-                console.error("❌ | SCDL stream error:", err);
+                console.error("SCDL stream error:", err);
                 reject(err);
             });
         });
