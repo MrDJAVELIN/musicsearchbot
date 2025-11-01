@@ -1,13 +1,18 @@
 import { Markup, Telegraf, session } from "telegraf";
 import { config } from "dotenv";
-import { downloadTrackBuffer, searchTrack } from "./utils/MusicUtils.ts";
-import type { Track } from "./utils/MusicUtils.ts";
+import {
+    searchTrack,
+    downloadTrackBuffer,
+    type Track,
+} from "./utils/MusicUtils.ts";
+import { loadLists, addList, getList } from "./utils/jsonUtils.ts";
 
 config();
-const bot = new Telegraf(process.env.token || "");
+
+const bot = new Telegraf(process.env.token!);
 bot.use(session());
 
-const globalLists = new Map<string, Track[]>();
+loadLists();
 
 function genListId() {
     return Math.random().toString(36).slice(2, 10);
@@ -37,7 +42,7 @@ bot.on("text", async (ctx) => {
 
     try {
         console.log(
-            `[Поиск] | "${searchQuery}" | от ${ctx.message.from.username}`
+            `[Поиск] | "${searchQuery}" | от ${ctx.from?.username || "anon"}`
         );
 
         let seconds = 0;
@@ -71,13 +76,14 @@ bot.on("text", async (ctx) => {
         }
 
         clearInterval(timer);
+
         await ctx.deleteMessage(searchmsg.message_id).catch(() => {});
 
         if (!filtered.length)
             return ctx.reply("❌ | Нет доступных для скачивания треков.");
 
         const listId = genListId();
-        globalLists.set(listId, filtered);
+        addList(listId, filtered);
 
         const buttons = filtered.map((t, i) => {
             let duration = "";
@@ -106,15 +112,13 @@ bot.on("callback_query", async (ctx) => {
     const cb = ctx.update.callback_query;
     if (!("data" in cb)) return ctx.answerCbQuery("Некорректный callback");
 
-    const data = cb.data;
+    const parts = cb.data.split("_");
+    if (parts.length !== 3) return ctx.answerCbQuery("❌ Ошибка callback");
 
-    if (!data.startsWith("sc_"))
-        return ctx.answerCbQuery("❌ | Неизвестная команда");
-
-    const [, listId, indexStr] = data.split("_");
+    const [, listId, indexStr] = parts;
     const index = Number(indexStr);
 
-    const list = globalLists.get(listId);
+    const list = getList(listId);
     if (!list) return ctx.answerCbQuery("❌ | Список устарел");
 
     const track = list[index];
@@ -140,4 +144,4 @@ bot.on("callback_query", async (ctx) => {
     }
 });
 
-bot.launch(() => console.log("Bot started"));
+bot.launch(() => console.log("✅ Bot started"));
